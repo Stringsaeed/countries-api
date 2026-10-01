@@ -1,0 +1,105 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_run_id:
+        description: Successful Deploy staging run ID to promote
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: countries-api-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment:
+      name: production
+      url: https://api.saeed.sh
+    steps:
+      - name: Check deployment environment settings
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          ALCHEMY_PASSWORD: ${{ secrets.ALCHEMY_PASSWORD }}
+          ALCHEMY_STATE_TOKEN: ${{ secrets.ALCHEMY_STATE_TOKEN }}
+          APPLE_APP_ID_PREFIX: ${{ vars.APPLE_APP_ID_PREFIX }}
+          APPLE_BUNDLE_ID: ${{ vars.APPLE_BUNDLE_ID }}
+        run: |
+          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY ALCHEMY_PASSWORD ALCHEMY_STATE_TOKEN APPLE_APP_ID_PREFIX APPLE_BUNDLE_ID; do
+            if [[ -z "${!name}" ]]; then
+              printf '::error::Missing GitHub environment setting %s\n' "$name"
+              exit 1
+            fi
+          done
+      - name: Validate the successful staging run
+        id: release
+        uses: actions/github-script@v7
+        env:
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+        with:
+          script: |
+            const input = process.env.STAGING_RUN_ID;
+            if (!/^\d+$/.test(input ?? '') || !Number.isSafeInteger(Number(input))) {
+              throw new Error('Provide a numeric staging workflow run ID.');
+            }
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              ...context.repo, run_id: Number(input),
+            });
+            if (run.path !== '.github/workflows/deploy-staging.yml' ||
+                run.head_branch !== 'main' || run.conclusion !== 'success' ||
+                !['push', 'workflow_dispatch'].includes(run.event)) {
+              throw new Error('Production requires a successful staging deployment from main.');
+            }
+            core.setOutput('sha', run.head_sha);
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Download the exact dataset tested in staging
+        uses: actions/download-artifact@v4
+        with:
+          name: geographic-release
+          path: data/generated
+          run-id: ${{ inputs.staging_run_id }}
+          github-token: ${{ github.token }}
+      - name: Deploy production with Alchemy
+        run: npm run deploy -- --stage production
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          ALCHEMY_PASSWORD: ${{ secrets.ALCHEMY_PASSWORD }}
+          ALCHEMY_STATE_TOKEN: ${{ secrets.ALCHEMY_STATE_TOKEN }}
+          APPLE_APP_ID_PREFIX: ${{ vars.APPLE_APP_ID_PREFIX }}
+          APPLE_BUNDLE_ID: ${{ vars.APPLE_BUNDLE_ID }}
+          API_DOMAIN: api.saeed.sh
+      - name: Verify production HTTPS and access control
+        run: npm run deploy:verify
+        env:
+          API_BASE_URL: https://api.saeed.sh
+      - name: Record production release
+        env:
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+        run: |
+          node --input-type=module -e 'import {readFileSync,appendFileSync} from "node:fs"; const {version}=JSON.parse(readFileSync("data/generated/latest.json","utf8")); appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Production deployed at https://api.saeed.sh\n\nDataset: ${version}\n\nCommit: ${process.env.RELEASE_SHA}\n\nStaging run: ${process.env.STAGING_RUN_ID}\n`);'

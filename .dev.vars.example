@@ -1,0 +1,2 @@
+# Local-only token. Generate with: openssl rand -hex 32
+DEV_AUTH_TOKEN=replace-with-a-random-local-token

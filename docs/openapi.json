@@ -1,0 +1,562 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Countries API",
+    "version": "1.0.0",
+    "description": "Geographic lists and English/Arabic search for native iOS clients. Follow docs/ios-authentication.md to construct cryptographic request proof."
+  },
+  "servers": [
+    { "url": "https://api.saeed.sh", "description": "Production" },
+    { "url": "https://staging.api.saeed.sh", "description": "Staging" }
+  ],
+  "paths": {
+    "/v1/countries.json": {
+      "get": {
+        "operationId": "listCountries",
+        "security": [{ "AppAttestKey": [], "AppAttestChallenge": [], "AppAttestAssertion": [] }],
+        "parameters": [
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Weighted en and ar language ranges. Regional tags are supported. Defaults to en.",
+            "schema": { "type": "string" }
+          },
+          { "name": "If-None-Match", "in": "header", "schema": { "type": "string" } },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Overrides Accept-Language.",
+            "schema": { "type": "string", "enum": ["en", "ar"] }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "English or Arabic word-prefix search. City queries require at least 2 normalized characters and at most 5 words.",
+            "schema": { "type": "string", "maxLength": 128 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 250, "default": 250 }
+          },
+          { "name": "cursor", "in": "query", "schema": { "type": "string", "maxLength": 1024 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "A localized, paginated list.",
+            "headers": {
+              "Content-Language": { "schema": { "type": "string", "enum": ["en", "ar"] } },
+              "ETag": { "schema": { "type": "string" } },
+              "X-Dataset-Version": { "schema": { "type": "string" } }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": { "type": "string" },
+                          "name": { "type": "string", "minLength": 1 },
+                          "flag": { "type": "string", "minLength": 1 },
+                          "prayerCalculationMethod": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "muslim_world_league",
+                                  "egyptian",
+                                  "karachi",
+                                  "umm_al_qura",
+                                  "dubai",
+                                  "qatar",
+                                  "kuwait",
+                                  "singapore",
+                                  "north_america",
+                                  "tehran",
+                                  "turkey"
+                                ]
+                              },
+                              { "type": "null" }
+                            ]
+                          },
+                          "names": {
+                            "type": "object",
+                            "properties": {
+                              "en": { "type": "string", "minLength": 1 },
+                              "ar": {
+                                "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+                              }
+                            },
+                            "required": ["en", "ar"],
+                            "additionalProperties": true
+                          },
+                          "nameLanguage": { "type": "string", "enum": ["en", "ar"] }
+                        },
+                        "required": [
+                          "code",
+                          "name",
+                          "flag",
+                          "prayerCalculationMethod",
+                          "names",
+                          "nameLanguage"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "language": { "type": "string", "enum": ["en", "ar"] },
+                        "version": { "type": "string" },
+                        "coverage": { "type": "string", "enum": ["world", "subset"] },
+                        "nextCursor": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+                        "total": { "type": "integer" }
+                      },
+                      "required": ["language", "version", "coverage", "nextCursor", "total"],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": ["data", "meta"],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "304": { "description": "The authenticated client's cached representation is current." },
+          "400": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "401": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "404": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "406": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "409": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "429": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "500": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "503": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          }
+        }
+      }
+    },
+    "/v1/countries/{countryCode}/cities.json": {
+      "get": {
+        "operationId": "listCities",
+        "security": [{ "AppAttestKey": [], "AppAttestChallenge": [], "AppAttestAssertion": [] }],
+        "parameters": [
+          {
+            "name": "countryCode",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^[A-Za-z]{2}$" }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Weighted en and ar language ranges. Regional tags are supported. Defaults to en.",
+            "schema": { "type": "string" }
+          },
+          { "name": "If-None-Match", "in": "header", "schema": { "type": "string" } },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Overrides Accept-Language.",
+            "schema": { "type": "string", "enum": ["en", "ar"] }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "English or Arabic word-prefix search. City queries require at least 2 normalized characters and at most 5 words.",
+            "schema": { "type": "string", "maxLength": 128 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 100 }
+          },
+          { "name": "cursor", "in": "query", "schema": { "type": "string", "maxLength": 1024 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "A localized, paginated list.",
+            "headers": {
+              "Content-Language": { "schema": { "type": "string", "enum": ["en", "ar"] } },
+              "ETag": { "schema": { "type": "string" } },
+              "X-Dataset-Version": { "schema": { "type": "string" } }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "integer", "exclusiveMinimum": 0 },
+                          "countryCode": { "type": "string" },
+                          "name": { "type": "string", "minLength": 1 },
+                          "region": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+                          "location": {
+                            "type": "object",
+                            "properties": {
+                              "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+                              "longitude": { "type": "number", "minimum": -180, "maximum": 180 }
+                            },
+                            "required": ["latitude", "longitude"],
+                            "additionalProperties": true
+                          },
+                          "timezone": { "type": "string", "minLength": 1 },
+                          "prayerCalculationMethod": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "muslim_world_league",
+                                  "egyptian",
+                                  "karachi",
+                                  "umm_al_qura",
+                                  "dubai",
+                                  "qatar",
+                                  "kuwait",
+                                  "singapore",
+                                  "north_america",
+                                  "tehran",
+                                  "turkey"
+                                ]
+                              },
+                              { "type": "null" }
+                            ]
+                          },
+                          "names": {
+                            "type": "object",
+                            "properties": {
+                              "en": { "type": "string", "minLength": 1 },
+                              "ar": {
+                                "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+                              }
+                            },
+                            "required": ["en", "ar"],
+                            "additionalProperties": true
+                          },
+                          "nameLanguage": { "type": "string", "enum": ["en", "ar"] }
+                        },
+                        "required": [
+                          "id",
+                          "countryCode",
+                          "name",
+                          "region",
+                          "location",
+                          "timezone",
+                          "prayerCalculationMethod",
+                          "names",
+                          "nameLanguage"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "language": { "type": "string", "enum": ["en", "ar"] },
+                        "version": { "type": "string" },
+                        "coverage": { "type": "string", "enum": ["world", "subset"] },
+                        "nextCursor": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+                      },
+                      "required": ["language", "version", "coverage", "nextCursor"],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": ["data", "meta"],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "304": { "description": "The authenticated client's cached representation is current." },
+          "400": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "401": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "404": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "406": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "409": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "429": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "500": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "503": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/challenge": {
+      "post": {
+        "operationId": "createChallenge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "keyId": { "type": "string" },
+                  "purpose": { "type": "string", "enum": ["attestation", "assertion"] }
+                },
+                "required": ["keyId", "purpose"],
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A one-time challenge valid for 120 seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["challenge", "expiresAt"],
+                  "properties": {
+                    "challenge": { "type": "string" },
+                    "expiresAt": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "401": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "413": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "415": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "429": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "500": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "503": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/attest": {
+      "post": {
+        "operationId": "enrollAppAttestKey",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "keyId": { "type": "string" },
+                  "challenge": { "type": "string" },
+                  "attestation": { "type": "string", "minLength": 2, "maxLength": 24000 }
+                },
+                "required": ["keyId", "challenge", "attestation"],
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": { "description": "The key was enrolled." },
+          "400": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "401": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "413": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "415": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "429": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "500": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          },
+          "503": {
+            "description": "Request rejected or service unavailable.",
+            "content": {
+              "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "The Worker is running. This does not check deployment readiness."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "integer" },
+          "detail": { "type": "string" },
+          "instance": { "type": "string" }
+        },
+        "required": ["type", "title", "status", "detail", "instance"],
+        "additionalProperties": true
+      }
+    },
+    "securitySchemes": {
+      "AppAttestKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-App-Attest-Key-Id",
+        "description": "Apple's base64 key identifier, not a shared API secret."
+      },
+      "AppAttestChallenge": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-App-Attest-Challenge",
+        "description": "A one-time server-issued challenge."
+      },
+      "AppAttestAssertion": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-App-Attest-Assertion",
+        "description": "A fresh cryptographic assertion bound to the complete URL and signed headers."
+      }
+    }
+  }
+}

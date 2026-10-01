@@ -1,0 +1,14 @@
+{
+  "countries": {
+    "AE": "dubai",
+    "EG": "egyptian",
+    "SA": "umm_al_qura",
+    "QA": "qatar",
+    "KW": "kuwait",
+    "PK": "karachi",
+    "BD": "karachi",
+    "SG": "singapore",
+    "TR": "turkey"
+  },
+  "cities": {}
+}
