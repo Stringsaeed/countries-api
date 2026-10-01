@@ -65,7 +65,7 @@ Do not run infrastructure destroy commands as routine cleanup. R2 and D1 resourc
 
 ## GitHub Actions
 
-The CI workflow checks pushes and pull requests without deployment credentials. `Deploy staging` runs on pushes to `main`, or manually from `main`. It runs checks, builds the full dataset, performs a real-data local smoke test, deploys to `staging.api.saeed.sh`, and verifies HTTPS, dataset version, and rejection of unauthenticated data requests. It then saves the generated dataset as a seven-day release artifact.
+The CI workflow checks pushes and pull requests without deployment credentials. `Deploy staging` runs on pushes to `main`, or manually from `main`. It runs checks, builds the full dataset, performs a real-data local smoke test, deploys to `staging.api.saeed.sh`, and verifies HTTPS, dataset version, and rejection of unauthenticated data requests. It waits up to ten minutes for HTTPS and the expected release to become ready, then saves the generated dataset as a seven-day release artifact. TLS verification stays enabled. Source snapshots are cached immediately after download so a later deployment failure does not discard them.
 
 `Deploy production` runs manually from `main`. Supply the successful staging run ID shown in its summary. The workflow validates the source run, checks out that run's exact commit, downloads its dataset artifact, and deploys to `api.saeed.sh`. It does not download a different geographic snapshot during promotion. An expired artifact requires a new staging run. Deployment concurrency is shared across both workflows, with running deployments allowed to finish.
 
