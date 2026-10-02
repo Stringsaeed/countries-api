@@ -49,11 +49,18 @@ jobs:
       - run: npm run check
       - run: npm audit --omit=dev --audit-level=high
       - name: Restore geographic source snapshot
-        uses: actions/cache@v4
+        id: sources
+        uses: actions/cache/restore@v4
         with:
           path: data/raw
           key: geonames-world-v1-${{ vars.GEONAMES_SNAPSHOT || 'initial' }}
       - run: npm run data:download
+      - name: Preserve source snapshot before deployment
+        if: steps.sources.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/raw
+          key: ${{ steps.sources.outputs.cache-primary-key }}
       - run: npm run data:build
       - run: npm run data:smoke
       - name: Deploy staging with Alchemy
