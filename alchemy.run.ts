@@ -12,6 +12,7 @@ import {
 import { Schema } from "effect";
 import { Manifest } from "./src/schema";
 import { importSql, publishObjects, release } from "./scripts/publish-data";
+import { androidConfig } from "./src/android-auth";
 
 function required(name: string) {
   const value = process.env[name];
@@ -40,6 +41,17 @@ const app = await alchemy("countries-api", {
 });
 if (!["staging", "production"].includes(app.stage))
   throw new Error("Only staging and production deployments are supported.");
+const androidPackage = process.env.ANDROID_PACKAGE_NAME?.trim() || "sh.saeed.azkarify";
+const androidCertificates = process.env.ANDROID_CERTIFICATE_SHA256?.trim() || "";
+const googleCredentials = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
+if (androidCertificates || googleCredentials) {
+  androidConfig({
+    ENVIRONMENT: app.stage,
+    ANDROID_PACKAGE_NAME: androidPackage,
+    ANDROID_CERTIFICATE_SHA256: androidCertificates,
+    ...(googleCredentials ? { GOOGLE_SERVICE_ACCOUNT_JSON: googleCredentials } : {}),
+  });
+}
 const productionDomain = process.env.API_DOMAIN?.trim() || "api.saeed.sh";
 const domain =
   app.stage === "production"
@@ -148,6 +160,11 @@ export const worker = await Worker("api", {
     ENVIRONMENT: app.stage,
     APPLE_APP_ID_PREFIX: prefix,
     APPLE_BUNDLE_ID: bundle,
+    ANDROID_PACKAGE_NAME: androidPackage,
+    ANDROID_CERTIFICATE_SHA256: androidCertificates,
+    ...(googleCredentials
+      ? { GOOGLE_SERVICE_ACCOUNT_JSON: alchemy.secret(googleCredentials) }
+      : {}),
     DATASET_VERSION: manifest.version,
   },
 });

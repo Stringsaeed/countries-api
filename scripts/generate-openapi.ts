@@ -42,7 +42,10 @@ const ProblemSchema = Schema.Struct({
   detail: Schema.String,
   instance: Schema.String,
 });
-const security = [{ AppAttestKey: [], AppAttestChallenge: [], AppAttestAssertion: [] }];
+const security = [
+  { AppAttestKey: [], AppAttestChallenge: [], AppAttestAssertion: [] },
+  { PlayIntegrity: [] },
+];
 function errors(statuses: number[]) {
   return Object.fromEntries(
     statuses.map((status) => [
@@ -121,7 +124,7 @@ const document = {
     title: "Countries API",
     version: "1.0.0",
     description:
-      "Geographic lists and English/Arabic search for native iOS clients. Follow docs/ios-authentication.md to construct cryptographic request proof.",
+      "Geographic lists and English/Arabic search for native iOS and Android clients. Follow docs/ios-authentication.md or docs/android-authentication.md to construct request proof.",
   },
   servers: [
     { url: "https://api.saeed.sh", description: "Production" },
@@ -200,6 +203,13 @@ const document = {
   components: {
     schemas: { Problem: jsonSchema(ProblemSchema) },
     securitySchemes: {
+      PlayIntegrity: {
+        type: "apiKey",
+        in: "header",
+        name: "X-Play-Integrity-Token",
+        description:
+          "A fresh Google Play Integrity standard token bound to the complete URL and signed headers. Requires a licensed Play-recognized build on a certified physical device.",
+      },
       AppAttestKey: {
         type: "apiKey",
         in: "header",

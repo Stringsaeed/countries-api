@@ -31,6 +31,9 @@ jobs:
           ALCHEMY_STATE_TOKEN: ${{ secrets.ALCHEMY_STATE_TOKEN }}
           APPLE_APP_ID_PREFIX: ${{ vars.APPLE_APP_ID_PREFIX }}
           APPLE_BUNDLE_ID: ${{ vars.APPLE_BUNDLE_ID }}
+          ANDROID_PACKAGE_NAME: ${{ vars.ANDROID_PACKAGE_NAME }}
+          ANDROID_CERTIFICATE_SHA256: ${{ vars.ANDROID_CERTIFICATE_SHA256 }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: |
           for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY ALCHEMY_PASSWORD ALCHEMY_STATE_TOKEN APPLE_APP_ID_PREFIX APPLE_BUNDLE_ID; do
             if [[ -z "${!name}" ]]; then
@@ -74,6 +77,9 @@ jobs:
           ALCHEMY_STATE_TOKEN: ${{ secrets.ALCHEMY_STATE_TOKEN }}
           APPLE_APP_ID_PREFIX: ${{ vars.APPLE_APP_ID_PREFIX }}
           APPLE_BUNDLE_ID: ${{ vars.APPLE_BUNDLE_ID }}
+          ANDROID_PACKAGE_NAME: ${{ vars.ANDROID_PACKAGE_NAME }}
+          ANDROID_CERTIFICATE_SHA256: ${{ vars.ANDROID_CERTIFICATE_SHA256 }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           STAGING_API_DOMAIN: staging.api.saeed.sh
       - name: Verify staging HTTPS and access control
         run: npm run deploy:verify

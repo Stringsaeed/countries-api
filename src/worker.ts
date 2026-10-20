@@ -29,7 +29,11 @@ app.onError((error, c) => {
       }),
     );
   if (status === 429 || status === 503) c.header("Retry-After", "60");
-  if (status === 401) c.header("WWW-Authenticate", 'AppAttest realm="countries-api"');
+  if (status === 401)
+    c.header(
+      "WWW-Authenticate",
+      'AppAttest realm="countries-api", PlayIntegrity realm="countries-api"',
+    );
   return new Response(
     JSON.stringify({
       type: "about:blank",
