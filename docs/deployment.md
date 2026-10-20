@@ -100,3 +100,9 @@ Once the repository is on GitHub, enable Actions, configure environments and cre
 The state service is provisioned automatically on the first configured deployment. If the application was already deployed using the previous local state backend, migrate that state before adopting this remote backend. Preserve the local state and do not start a fresh infrastructure deployment over existing resources without migration.
 
 The post-deployment checks verify the reachable Worker and denied unauthenticated access. They do not replace physical-device attestation checks or prove the entire authenticated search flow. No GitHub or Cloudflare deployment has been executed from this workspace yet.
+
+## Android release authentication
+
+Set `ANDROID_PACKAGE_NAME` and `ANDROID_CERTIFICATE_SHA256` as GitHub environment variables and `GOOGLE_SERVICE_ACCOUNT_JSON` as an environment secret. Android is disabled until both the certificate allowlist and credentials are set. Follow [Android setup](android-authentication.md) for the linked Cloud project, Play app-signing certificate, request protocol, quota, and local debug connection.
+
+The user reports Google Cloud project number `97729473680` linked for package `sh.saeed.azkarify`. Configure the Android release client with `setCloudProjectNumber(97729473680L)`. The Worker does not use a project-number binding. Both GitHub environments have the Android package and certificate variables and the service-account secret as of October 20, 2026. The secret contents, certificate match, deployment, and authenticated physical-device request remain unverified.

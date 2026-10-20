@@ -4,6 +4,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { Schema } from "effect";
 import { ApiError, decode } from "./errors";
 import { assertion, enroll } from "./attestation";
+import { authenticateAndroid } from "./android-auth";
 import { AttestationRequest, Challenge, KeyId } from "./schema";
 
 type Success<T> = { ok: true; value: T };
@@ -18,8 +19,31 @@ const StoredKey = Schema.Struct({
 });
 
 export class AppAttestDevice extends DurableObject<Env> {
+  async claimIntegrityToken(tokenId: string): Promise<boolean> {
+    const expires = Date.now() + 300000;
+    const used = this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec("DELETE FROM integrity_tokens WHERE expires <= ?", Date.now());
+      if (
+        this.ctx.storage.sql
+          .exec("SELECT token FROM integrity_tokens WHERE token=?", tokenId)
+          .toArray().length
+      )
+        return true;
+      this.ctx.storage.sql.exec("INSERT INTO integrity_tokens VALUES (?,?)", tokenId, expires);
+      return false;
+    });
+    if (used) return false;
+    await this.ctx.storage.setAlarm(expires);
+    return true;
+  }
+  alarm() {
+    this.ctx.storage.sql.exec("DELETE FROM integrity_tokens WHERE expires <= ?", Date.now());
+  }
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS integrity_tokens (token TEXT PRIMARY KEY, expires INTEGER NOT NULL)",
+    );
     ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS device (id INTEGER PRIMARY KEY CHECK(id=1), value TEXT NOT NULL)",
     );
@@ -167,6 +191,7 @@ export async function authenticate(request: Request, env: Env): Promise<string> 
     const expected = Buffer.from(`Bearer ${env.DEV_AUTH_TOKEN}`);
     if (supplied.length === expected.length && timingSafeEqual(supplied, expected)) return "local";
   }
+  if (request.headers.has("X-Play-Integrity-Token")) return authenticateAndroid(request, env);
   configured(env);
   let keyId: string;
   let challenge: string;

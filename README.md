@@ -1,6 +1,6 @@
 # Countries API
 
-A native iOS geographic API built with TypeScript, Hono, Effect, and Cloudflare Workers. It lists countries and populated places, searches English and Arabic names, and requires Apple App Attest proof before serving data.
+A native iOS and Android geographic API built with TypeScript, Hono, Effect, and Cloudflare Workers. It lists countries and populated places, searches English and Arabic names, and requires Apple App Attest or Google Play Integrity proof before serving data.
 
 The production base URL is `https://api.saeed.sh`. The staging base URL is `https://staging.api.saeed.sh`. Override it with `STAGING_API_DOMAIN` if needed. See [domain and DNS setup](docs/deployment.md#connect-the-api-domain).
 
@@ -54,7 +54,7 @@ Errors use `application/problem+json`, an HTTP status, a stable error code in `t
 
 The schema-derived [OpenAPI contract](docs/openapi.json) is checked in CI. Regenerate it with `npm run api:generate` after changing response or enrollment schemas. Run `npm run data:smoke` after generating data to exercise actual UAE records in the bundled Worker.
 
-See [the iOS protocol](docs/ios-authentication.md), [deployment setup](docs/deployment.md), [architecture](docs/architecture.md), and [data provenance](docs/data.md).
+See [the iOS protocol](docs/ios-authentication.md), [Android setup and protocol](docs/android-authentication.md), [deployment setup](docs/deployment.md), [architecture](docs/architecture.md), and [data provenance](docs/data.md).
 
 ## Public repository
 

@@ -12,6 +12,8 @@
     "APPLE_APP_ID_PREFIX": "UNCONFIGURED",
     "APPLE_BUNDLE_ID": "UNCONFIGURED",
     "DATASET_VERSION": "unconfigured",
+    "ANDROID_PACKAGE_NAME": "sh.saeed.azkarify",
+    "ANDROID_CERTIFICATE_SHA256": "",
   },
   "r2_buckets": [{ "binding": "DATA", "bucket_name": "countries-api-local-data" }],
   "d1_databases": [

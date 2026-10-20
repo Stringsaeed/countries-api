@@ -6,13 +6,14 @@ import {
   runInDurableObject,
 } from "cloudflare:test";
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign, verify } from "node:crypto";
 import { Buffer } from "node:buffer";
 import cbor from "cbor";
 import { Schema } from "effect";
 import app from "../src/worker";
 import { device, requestPayload } from "../src/auth";
 import { enroll } from "../src/attestation";
+import { androidRequestHash } from "../src/android-auth";
 import { query, normalizeSearch } from "../src/query";
 import developmentFixture from "./fixtures/attestation-development.json";
 import productionFixture from "./fixtures/attestation-production.json";
@@ -89,7 +90,10 @@ beforeAll(async () => {
       .run();
   }
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 describe("data API", () => {
   it("reports the deployed dataset version for release verification", async () => {
     const response = await SELF.fetch("https://api.example.com/health");
@@ -379,5 +383,228 @@ describe("App Attest", () => {
     for (let i = 0; i < 8; i++) expect((await stub.challenge("attestation")).ok).toBe(true);
     expect(await stub.challenge("attestation")).toEqual({ ok: false, reason: "rate_limited" });
     expect((await stub.challenge("assertion")).ok).toBe(false);
+  });
+});
+
+describe("Android authentication", () => {
+  it("matches the Android canonical payload test vector, including the empty ETag", () => {
+    const req = new Request("https://api.example.com/v1/countries.json?lang=en", {
+      headers: { "Accept-Language": "en" },
+    });
+    expect(androidRequestHash(req)).toBe("qiMLNzO9e1_BHYxHtLy42Hk2R1Eyku5kndgTj5uXaac");
+  });
+  const keys = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const certificate = Buffer.alloc(32, 7).toString("base64url");
+  const androidEnv = {
+    ...env,
+    ENVIRONMENT: "production",
+    ANDROID_PACKAGE_NAME: "sh.saeed.azkarify",
+    ANDROID_CERTIFICATE_SHA256: certificate,
+    GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify({
+      client_email: "countries-api@test-project.iam.gserviceaccount.com",
+      private_key: keys.privateKey.export({ type: "pkcs8", format: "pem" }),
+    }),
+  };
+  function request(extra: HeadersInit = {}, token = crypto.randomUUID()) {
+    return new Request("https://api.example.com/v1/countries.json?lang=en", {
+      headers: { "X-Play-Integrity-Token": token, ...extra },
+    });
+  }
+  function verdict(request: Request) {
+    return {
+      tokenPayloadExternal: {
+        requestDetails: {
+          requestPackageName: androidEnv.ANDROID_PACKAGE_NAME,
+          requestHash: androidRequestHash(request),
+          timestampMillis: String(Date.now()),
+        },
+        appIntegrity: {
+          appRecognitionVerdict: "PLAY_RECOGNIZED",
+          packageName: androidEnv.ANDROID_PACKAGE_NAME,
+          certificateSha256Digest: [certificate],
+        },
+        accountDetails: { appLicensingVerdict: "LICENSED" },
+        deviceIntegrity: { deviceRecognitionVerdict: ["MEETS_DEVICE_INTEGRITY"] },
+      },
+    };
+  }
+  function google(payload: unknown, decodeStatus = 200) {
+    return vi.spyOn(globalThis, "fetch").mockImplementation((url, init) => {
+      if (url === "https://oauth2.googleapis.com/token") {
+        if (!(init?.body instanceof URLSearchParams)) throw new Error("Expected form data.");
+        const params = init.body;
+        expect(params.get("grant_type")).toBe("urn:ietf:params:oauth:grant-type:jwt-bearer");
+        const jwt = params.get("assertion")?.split(".") ?? [];
+        expect(jwt).toHaveLength(3);
+        expect(
+          verify(
+            "RSA-SHA256",
+            Buffer.from(`${jwt[0]}.${jwt[1]}`),
+            keys.publicKey,
+            Buffer.from(jwt[2] ?? "", "base64url"),
+          ),
+        ).toBe(true);
+        const claims: unknown = JSON.parse(Buffer.from(jwt[1] ?? "", "base64url").toString());
+        expect(claims).toMatchObject({
+          iss: "countries-api@test-project.iam.gserviceaccount.com",
+          scope: "https://www.googleapis.com/auth/playintegrity",
+          aud: "https://oauth2.googleapis.com/token",
+        });
+        return Promise.resolve(
+          Response.json({ access_token: "google-test-access-token", expires_in: 3600 }),
+        );
+      }
+      expect(url).toBe(
+        "https://playintegrity.googleapis.com/v1/sh.saeed.azkarify:decodeIntegrityToken",
+      );
+      expect(init?.headers).toEqual({
+        Authorization: "Bearer google-test-access-token",
+        "Content-Type": "application/json",
+      });
+      return Promise.resolve(Response.json(payload, { status: decodeStatus }));
+    });
+  }
+  async function send(request: Request, bindings: Env = androidEnv) {
+    const ctx = createExecutionContext();
+    const response = await app.fetch(request, bindings, ctx);
+    await waitOnExecutionContext(ctx);
+    return response;
+  }
+  it("serves catalog data and rejects reuse before contacting Google again", async () => {
+    const req = request({ "Accept-Language": "en" });
+    const mock = google(verdict(req));
+    const response = await send(req.clone());
+    expect(response.status).toBe(200);
+    expect((await page(response)).data.map((country) => country.name)).toEqual([
+      "United Arab Emirates",
+      "Egypt",
+    ]);
+    const calls = mock.mock.calls.length;
+    const replay = await send(req.clone());
+    expect(replay.status).toBe(401);
+    expect(mock.mock.calls.length).toBe(calls);
+  });
+  it("requires a fresh token for conditional requests on a warmed cache", async () => {
+    const req = request();
+    google(verdict(req));
+    const response = await send(req);
+    const conditional = request({ "If-None-Match": response.headers.get("ETag") ?? "" });
+    google(verdict(conditional));
+    expect((await send(conditional)).status).toBe(304);
+  });
+  it("serves Arabic city search through Android authentication without Apple configuration", async () => {
+    const req = new Request("https://api.example.com/v1/countries/AE/cities.json?q=Dubai", {
+      headers: { "X-Play-Integrity-Token": crypto.randomUUID(), "Accept-Language": "ar" },
+    });
+    google(verdict(req));
+    const response = await send(req, {
+      ...androidEnv,
+      APPLE_APP_ID_PREFIX: "UNCONFIGURED",
+      APPLE_BUNDLE_ID: "UNCONFIGURED",
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Language")).toBe("ar");
+    expect((await page(response)).data.map((city) => city.name)).toEqual(["دبي"]);
+  });
+  it("accepts a token only once when duplicate requests arrive concurrently", async () => {
+    const req = request();
+    google(verdict(req));
+    const responses = await Promise.all([send(req.clone()), send(req.clone())]);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 401]);
+  });
+  it.each(["url", "language", "etag", "method"])(
+    "rejects proof bound to another %s",
+    async (field) => {
+      const req = request();
+      const other = new Request(field === "url" ? `${req.url}&limit=1` : req.url, {
+        method: field === "method" ? "POST" : "GET",
+        headers:
+          field === "language"
+            ? { "Accept-Language": "ar" }
+            : field === "etag"
+              ? { "If-None-Match": '"other"' }
+              : {},
+      });
+      google(verdict(other));
+      expect((await send(req)).status).toBe(401);
+    },
+  );
+  it.each([
+    "request-package",
+    "app-package",
+    "certificate",
+    "recognition",
+    "license",
+    "device",
+    "expired",
+    "future",
+    "timestamp",
+  ])("rejects invalid %s verdicts", async (field) => {
+    const req = request();
+    const payload = verdict(req);
+    const details = payload.tokenPayloadExternal;
+    switch (field) {
+      case "request-package":
+        details.requestDetails.requestPackageName = "com.other.app";
+        break;
+      case "app-package":
+        details.appIntegrity.packageName = "com.other.app";
+        break;
+      case "certificate":
+        details.appIntegrity.certificateSha256Digest = [Buffer.alloc(32, 8).toString("base64url")];
+        break;
+      case "recognition":
+        details.appIntegrity.appRecognitionVerdict = "UNEVALUATED";
+        break;
+      case "license":
+        details.accountDetails.appLicensingVerdict = "UNLICENSED";
+        break;
+      case "device":
+        details.deviceIntegrity.deviceRecognitionVerdict = [];
+        break;
+      case "expired":
+        details.requestDetails.timestampMillis = String(Date.now() - 121000);
+        break;
+      case "future":
+        details.requestDetails.timestampMillis = String(Date.now() + 10000);
+        break;
+      case "timestamp":
+        details.requestDetails.timestampMillis = "NaN";
+        break;
+    }
+    google(payload);
+    const response = await send(req);
+    expect(response.status).toBe(401);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+  });
+  it("fails closed without Android credentials while leaving local debug access available", async () => {
+    expect((await send(request(), { ...env, ENVIRONMENT: "production" })).status).toBe(503);
+    expect((await local("/v1/countries.json")).status).toBe(200);
+  });
+  it.each(["service-account", "certificate"])(
+    "rejects partial configuration missing the %s before contacting Google",
+    async (missing) => {
+      const mock = google({});
+      const response = await send(request(), {
+        ...androidEnv,
+        ...(missing === "service-account"
+          ? { GOOGLE_SERVICE_ACCOUNT_JSON: "" }
+          : { ANDROID_CERTIFICATE_SHA256: "" }),
+      });
+      expect(response.status).toBe(503);
+      expect(await problem(response)).toMatchObject({ title: "authentication_not_configured" });
+      expect(mock).not.toHaveBeenCalled();
+    },
+  );
+  it("maps Google outages to 503 and consumes the failed token", async () => {
+    const req = request();
+    google({}, 503);
+    expect((await send(req.clone())).status).toBe(503);
+    expect((await send(req.clone())).status).toBe(401);
+  });
+  it("rejects malformed tokens before contacting Google", async () => {
+    const mock = google({});
+    expect((await send(request({}, "bad token"))).status).toBe(401);
+    expect(mock).not.toHaveBeenCalled();
   });
 });

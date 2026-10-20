@@ -3,7 +3,7 @@
   "info": {
     "title": "Countries API",
     "version": "1.0.0",
-    "description": "Geographic lists and English/Arabic search for native iOS clients. Follow docs/ios-authentication.md to construct cryptographic request proof."
+    "description": "Geographic lists and English/Arabic search for native iOS and Android clients. Follow docs/ios-authentication.md or docs/android-authentication.md to construct request proof."
   },
   "servers": [
     { "url": "https://api.saeed.sh", "description": "Production" },
@@ -13,7 +13,10 @@
     "/v1/countries.json": {
       "get": {
         "operationId": "listCountries",
-        "security": [{ "AppAttestKey": [], "AppAttestChallenge": [], "AppAttestAssertion": [] }],
+        "security": [
+          { "AppAttestKey": [], "AppAttestChallenge": [], "AppAttestAssertion": [] },
+          { "PlayIntegrity": [] }
+        ],
         "parameters": [
           {
             "name": "Accept-Language",
@@ -181,7 +184,10 @@
     "/v1/countries/{countryCode}/cities.json": {
       "get": {
         "operationId": "listCities",
-        "security": [{ "AppAttestKey": [], "AppAttestChallenge": [], "AppAttestAssertion": [] }],
+        "security": [
+          { "AppAttestKey": [], "AppAttestChallenge": [], "AppAttestAssertion": [] },
+          { "PlayIntegrity": [] }
+        ],
         "parameters": [
           {
             "name": "countryCode",
@@ -539,6 +545,12 @@
       }
     },
     "securitySchemes": {
+      "PlayIntegrity": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Play-Integrity-Token",
+        "description": "A fresh Google Play Integrity standard token bound to the complete URL and signed headers. Requires a licensed Play-recognized build on a certified physical device."
+      },
       "AppAttestKey": {
         "type": "apiKey",
         "in": "header",
